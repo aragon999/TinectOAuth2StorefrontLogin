@@ -37,7 +37,7 @@ final readonly class PasswordLoginSubscriber implements EventSubscriberInterface
              INNER JOIN tinect_oauth_storefront_customer_key k ON k.customer_id = c.id
              INNER JOIN tinect_oauth_storefront_client cl ON cl.id = k.client_id
              WHERE LOWER(c.email) = :email
-               AND (c.sales_channel_id = :salesChannelId OR c.sales_channel_id IS NULL)
+               AND (c.bound_sales_channel_id = :salesChannelId OR c.bound_sales_channel_id IS NULL)
                AND c.guest = 0
                AND cl.disable_password_login = 1
                AND cl.active = 1
