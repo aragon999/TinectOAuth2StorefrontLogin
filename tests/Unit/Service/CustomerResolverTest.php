@@ -8,6 +8,7 @@ use Shopware\Core\Checkout\Customer\CustomerEntity;
 use Shopware\Core\Checkout\Customer\SalesChannel\AbstractRegisterRoute;
 use Shopware\Core\Checkout\Customer\SalesChannel\AccountService;
 use Shopware\Core\Framework\Uuid\Uuid;
+use Shopware\Core\Framework\DataAbstractionLayer\EntityRepository;
 use Shopware\Core\System\SalesChannel\SalesChannelContext;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -19,6 +20,8 @@ use Tinect\OAuth2StorefrontLogin\Exception\OAuthAccountAlreadyConnectedException
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthEmailMismatchException;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthNoAccountFoundException;
 use Tinect\OAuth2StorefrontLogin\Service\CustomerResolver;
+use Doctrine\DBAL\DriverManager;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class CustomerResolverTest extends TestCase
 {
@@ -107,6 +110,7 @@ final class CustomerResolverTest extends TestCase
         $connection->method('fetchOne')->willReturn($otherCustomerId);
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(connection: $connection);
 
@@ -130,6 +134,7 @@ final class CustomerResolverTest extends TestCase
             ->with(self::isInstanceOf(OAuthCustomerConnectedEvent::class));
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(connection: $connection, eventDispatcher: $eventDispatcher);
 
@@ -149,6 +154,7 @@ final class CustomerResolverTest extends TestCase
         $eventDispatcher->expects(self::once())->method('dispatch');
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(connection: $connection, eventDispatcher: $eventDispatcher);
 
@@ -172,6 +178,7 @@ final class CustomerResolverTest extends TestCase
             ->with(self::isInstanceOf(OAuthCustomerDisconnectedEvent::class));
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(connection: $connection, eventDispatcher: $eventDispatcher);
 
@@ -218,6 +225,7 @@ final class CustomerResolverTest extends TestCase
             ->with($existingCustomerId);
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(connection: $connection, accountService: $accountService);
 
@@ -358,6 +366,7 @@ final class CustomerResolverTest extends TestCase
             ->with(self::isInstanceOf(OAuthCustomerEmailUpdatedEvent::class));
 
         $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
 
         $resolver = $this->makeResolver(
             connection: $connection,
@@ -366,6 +375,56 @@ final class CustomerResolverTest extends TestCase
         );
 
         $resolver->resolve($user, $this->clientId, 'any', $context, updateEmailOnLogin: true);
+    }
+
+    public static function salesChannelScenarios(): iterable
+    {
+        yield 'shared account, key' => [false, false, false, false, true];
+        yield 'shared account, key and email' => [false, true, false, false, true];
+        yield 'shared account, email' => [false, false, true, false, true];
+        yield 'foreign bound account, key' => [true, false, false, false, false];
+        yield 'foreign bound account, email' => [true, false, true, false, false];
+        yield 'same subject in another OAuth client' => [false, false, false, false, false, true];
+        yield 'bound account in its own channel' => [true, false, false, false, true, false, true];
+        yield 'shared account, changed email' => [false, true, false, true, false];
+    }
+
+    #[DataProvider('salesChannelScenarios')]
+    public function testRespectsBindingAcrossCreationChannels(bool $bound, bool $trustEmail, bool $emailOnly, bool $changedEmail, bool $login, bool $otherClient = false, bool $sameChannel = false): void
+    {
+        $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $connection->executeStatement('CREATE TABLE customer (id BLOB, email TEXT, sales_channel_id BLOB, bound_sales_channel_id BLOB, active INTEGER, guest INTEGER)');
+        $connection->executeStatement('CREATE TABLE tinect_oauth_storefront_customer_key (customer_id BLOB, client_id BLOB, primary_key TEXT)');
+        $customerId = $this->customerId;
+        $clientId = $this->clientId;
+        $creationChannelId = Uuid::randomHex();
+        $connection->insert('customer', [
+            'id' => Uuid::fromHexToBytes($customerId),
+            'email' => 'customer@example.com',
+            'sales_channel_id' => Uuid::fromHexToBytes($creationChannelId),
+            'bound_sales_channel_id' => $bound ? Uuid::fromHexToBytes($creationChannelId) : null,
+            'active' => 1,
+            'guest' => 0,
+        ]);
+        $connection->insert('tinect_oauth_storefront_customer_key', [
+            'customer_id' => Uuid::fromHexToBytes($customerId),
+            'client_id' => Uuid::fromHexToBytes($clientId),
+            'primary_key' => 'subject',
+        ]);
+        $user = new User();
+        $user->primaryKey = $emailOnly ? '' : 'subject';
+        $user->emails = $otherClient ? [] : [$changedEmail ? 'changed@example.com' : 'customer@example.com'];
+        $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn($sameChannel ? $creationChannelId : Uuid::randomHex());
+        $accountService = $this->createMock(AccountService::class);
+        $accountService->expects($login ? self::once() : self::never())->method('loginById')->with($customerId);
+        $resolver = $this->makeResolver(connection: $connection, accountService: $accountService);
+
+        if (!$login) {
+            $this->expectException($changedEmail ? OAuthEmailMismatchException::class : OAuthNoAccountFoundException::class);
+        }
+        // An empty subject exercises email lookup without writing a new key.
+        $resolver->resolve($user, $otherClient ? Uuid::randomHex() : $clientId, 'Google', $context, allowRegistration: false, trustEmail: $trustEmail);
     }
 
     // -------------------------------------------------------------------------
@@ -383,6 +442,7 @@ final class CustomerResolverTest extends TestCase
             $this->createStub(AbstractRegisterRoute::class),
             $this->createStub(RequestStack::class),
             $eventDispatcher ?? $this->createStub(EventDispatcherInterface::class),
+            $this->createStub(EntityRepository::class),
         );
     }
 }

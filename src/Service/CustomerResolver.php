@@ -158,7 +158,7 @@ final readonly class CustomerResolver
              WHERE k.client_id = :clientId
                AND k.primary_key = :primaryKey
                AND LOWER(c.email) IN (:emails)
-               AND (c.sales_channel_id = :salesChannelId OR c.sales_channel_id IS NULL)
+               AND (c.bound_sales_channel_id = :salesChannelId OR c.bound_sales_channel_id IS NULL)
                AND c.active = 1
                AND c.guest = 0',
             [
@@ -187,7 +187,7 @@ final readonly class CustomerResolver
                  INNER JOIN customer c ON c.id = k.customer_id
                  WHERE k.client_id = :clientId
                    AND k.primary_key = :primaryKey
-                   AND (c.sales_channel_id = :salesChannelId OR c.sales_channel_id IS NULL)
+                   AND (c.bound_sales_channel_id = :salesChannelId OR c.bound_sales_channel_id IS NULL)
                    AND c.active = 1
                    AND c.guest = 0',
             [
@@ -238,10 +238,10 @@ final readonly class CustomerResolver
             'SELECT LOWER(HEX(id))
              FROM customer
              WHERE LOWER(email) IN (:emails)
-               AND (sales_channel_id = :salesChannelId OR sales_channel_id IS NULL)
+               AND (bound_sales_channel_id = :salesChannelId OR bound_sales_channel_id IS NULL)
                AND active = 1
                AND guest = 0
-               ORDER BY sales_channel_id DESC',
+               ORDER BY bound_sales_channel_id DESC',
             [
                 'emails' => $emails,
                 'salesChannelId' => Uuid::fromHexToBytes($salesChannelId),
