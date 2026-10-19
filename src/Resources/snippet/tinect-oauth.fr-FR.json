@@ -33,7 +33,11 @@
             "loginRequired": "Veuillez vous connecter avant d'associer un compte.",
             "connectFailed": "Impossible de connecter le compte. Veuillez réessayer.",
             "disconnectFailed": "Impossible de déconnecter le compte. Veuillez réessayer.",
-            "emailMismatch": "L'adresse e-mail du fournisseur ne correspond pas à l'e-mail de votre compte. Si votre adresse e-mail a changé, veuillez contacter le responsable de la boutique."
+            "emailMismatch": "L'adresse e-mail du fournisseur ne correspond pas à l'e-mail de votre compte. Si votre adresse e-mail a changé, veuillez contacter le responsable de la boutique.",
+            "enforcedProvider": "Ce mode de connexion n'est pas disponible pour votre adresse e-mail. Veuillez saisir votre adresse e-mail dans le formulaire de connexion, nous vous redirigerons automatiquement vers la bonne page de connexion."
         }
+    },
+    "error": {
+        "TINECT_OAUTH_ENFORCED_EMAIL_DOMAIN": "Vous ne pouvez pas utiliser cette adresse e-mail ici. Veuillez vous connecter via le formulaire de connexion ou contacter le responsable de la boutique."
     }
 }

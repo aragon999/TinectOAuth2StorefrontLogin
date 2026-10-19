@@ -8,11 +8,13 @@ use Shopware\Core\Checkout\Customer\Event\CustomerBeforeLoginEvent;
 use Shopware\Core\Framework\Uuid\Uuid;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Tinect\OAuth2StorefrontLogin\Service\CustomerResolver;
+use Tinect\OAuth2StorefrontLogin\Service\EnforcedEmailDomainService;
 
 final readonly class PasswordLoginSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private Connection $connection,
+        private EnforcedEmailDomainService $enforcedEmailDomains,
     ) {
     }
 
@@ -27,6 +29,11 @@ final readonly class PasswordLoginSubscriber implements EventSubscriberInterface
     {
         if ($event->getContext()->hasState(CustomerResolver::STATE)) {
             return;
+        }
+
+        // Email domain is enforced to log in via OAuth, no account lookup needed
+        if ($this->enforcedEmailDomains->getEnforcedClientIds($event->getEmail()) !== []) {
+            throw CustomerException::badCredentials();
         }
 
         $salesChannelId = $event->getSalesChannelContext()->getSalesChannelId();

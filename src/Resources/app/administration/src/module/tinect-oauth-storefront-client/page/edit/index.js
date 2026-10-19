@@ -100,6 +100,7 @@ Component.register('tinect-oauth-storefront-client-edit-page', {
             this.client.updateEmailOnLogin = false;
             this.client.disablePasswordLogin = true;
             this.client.hideLoginButton = false;
+            this.client.enforcedEmailDomains = [];
             this.client.config = {};
         } else {
             this.loadClient();
@@ -116,6 +117,9 @@ Component.register('tinect-oauth-storefront-client-edit-page', {
                     if (!this.client.config) {
                         this.client.config = {};
                     }
+                    if (!Array.isArray(this.client.enforcedEmailDomains)) {
+                        this.client.enforcedEmailDomains = [];
+                    }
                     this.isLoading = false;
                 });
         },
@@ -127,6 +131,10 @@ Component.register('tinect-oauth-storefront-client-edit-page', {
             ) {
                 return;
             }
+
+            this.client.enforcedEmailDomains = this.normalizeEmailDomains(
+                this.client.enforcedEmailDomains
+            );
 
             this.isLoading = true;
             this.isSaveSuccessful = false;
@@ -161,6 +169,22 @@ Component.register('tinect-oauth-storefront-client-edit-page', {
                         ),
                     });
                 });
+        },
+
+        validateEmailDomain(searchTerm) {
+            return /^@?[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(searchTerm.trim());
+        },
+
+        normalizeEmailDomains(domains) {
+            if (!Array.isArray(domains)) {
+                return [];
+            }
+
+            const normalized = domains
+                .map((domain) => domain.trim().replace(/^@/, '').toLowerCase())
+                .filter((domain) => domain !== '');
+
+            return [...new Set(normalized)];
         },
 
         onDelete() {

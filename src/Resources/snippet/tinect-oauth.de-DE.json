@@ -33,7 +33,11 @@
             "loginRequired": "Bitte melden Sie sich zuerst an, bevor Sie ein Konto verknüpfen.",
             "connectFailed": "Das Konto konnte nicht verknüpft werden. Bitte versuchen Sie es erneut.",
             "disconnectFailed": "Die Verbindung konnte nicht getrennt werden. Bitte versuchen Sie es erneut.",
-            "emailMismatch": "Die E-Mail-Adresse des Anbieters stimmt nicht mit der Konto-E-Mail überein. Falls sich Ihre E-Mail-Adresse geändert hat, wenden Sie sich bitte an den Shop-Betreiber."
+            "emailMismatch": "Die E-Mail-Adresse des Anbieters stimmt nicht mit der Konto-E-Mail überein. Falls sich Ihre E-Mail-Adresse geändert hat, wenden Sie sich bitte an den Shop-Betreiber.",
+            "enforcedProvider": "Diese Anmeldemethode steht für Ihre E-Mail-Adresse nicht zur Verfügung. Bitte geben Sie Ihre E-Mail-Adresse im Anmeldeformular ein, dann leiten wir Sie automatisch zur passenden Anmeldung weiter."
         }
+    },
+    "error": {
+        "TINECT_OAUTH_ENFORCED_EMAIL_DOMAIN": "Diese E-Mail-Adresse können Sie hier nicht verwenden. Bitte melden Sie sich über das Anmeldeformular an oder wenden Sie sich an den Shop-Betreiber."
     }
 }

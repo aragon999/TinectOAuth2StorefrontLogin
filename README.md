@@ -31,6 +31,7 @@ Create one entry per provider you want to offer:
 | **Update email address on every login** | When enabled, the customer's email address in Shopware is updated to match the provider's email on each login. Useful when the provider (e.g. corporate SSO) is the authoritative source for email addresses. |
 | **Disable password login** | When enabled, customers who have a connected account with this provider can no longer log in using their email and password — they must use this OAuth provider instead. Enabled by default. If a customer follows a password reset link, the reset form is replaced by a login button for their connected provider. |
 | **Hide login button** | When enabled, the login button for this provider is not shown on the storefront login page. The provider can still be used to connect accounts from the customer profile page. |
+| **Enforced email domains** | List of email domains (e.g. `company.com`, exact match, subdomains are not included) whose customers must sign in via this provider — typically the shop owner's employees. Password login, registration and password recovery in the storefront with such an address redirect straight to the provider (combine with **Hide login button** so regular customers do not see it). Store API login, registration, recovery and changing the account email to such a domain are rejected. Logins or connects via any other provider are rejected as well, and on every login via this provider the customer's password is replaced by a random one. |
 
 ### GitHub
 

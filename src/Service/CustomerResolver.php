@@ -25,6 +25,7 @@ use Tinect\OAuth2StorefrontLogin\Event\OAuthCustomerEmailUpdatedEvent;
 use Tinect\OAuth2StorefrontLogin\Event\OAuthCustomerRegisteredEvent;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthAccountAlreadyConnectedException;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthEmailMismatchException;
+use Tinect\OAuth2StorefrontLogin\Exception\OAuthEnforcedProviderException;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthNoAccountFoundException;
 
 final readonly class CustomerResolver
@@ -38,12 +39,15 @@ final readonly class CustomerResolver
         private RequestStack $requestStack,
         private EventDispatcherInterface $eventDispatcher,
         private EntityRepository $customerRepository,
+        private EnforcedEmailDomainService $enforcedEmailDomains,
     ) {
     }
 
     public function resolve(User $user, string $clientId, string $providerName, SalesChannelContext $context, bool $allowRegistration = true, bool $trustEmail = false, bool $updateEmailOnLogin = false, bool $disablePasswordLogin = false): void
     {
         $context->addState(self::STATE);
+
+        $this->assertClientAllowedForEmail($clientId, $user->primaryEmail);
 
         // 1. Existing OAuth key mapping → direct login
         //    When trustEmail is enabled, the email from the provider must also
@@ -63,10 +67,13 @@ final readonly class CustomerResolver
         }
 
         if ($customerId !== null) {
+            $enforced = $this->assertClientAllowedForCustomer($clientId, $customerId);
+
             if ($updateEmailOnLogin && $user->primaryEmail !== '') {
                 $this->updateCustomerEmail($customerId, $clientId, $user->primaryEmail, $context);
             }
 
+            $this->randomizePasswordIfNeeded($customerId, $enforced, $context);
             $this->accountService->loginById($customerId, $context);
 
             return;
@@ -76,8 +83,10 @@ final readonly class CustomerResolver
         $existingCustomerId = $this->findActiveCustomerIdByEmail($user->emails, $context->getSalesChannelId());
 
         if ($existingCustomerId !== null) {
+            $enforced = $this->assertClientAllowedForCustomer($clientId, $existingCustomerId);
+
             $this->storeCustomerKey($existingCustomerId, $clientId, $user->primaryKey);
-            $this->randomizePasswordIfNeeded($existingCustomerId, $disablePasswordLogin, $context);
+            $this->randomizePasswordIfNeeded($existingCustomerId, $disablePasswordLogin || $enforced, $context);
             $this->accountService->loginById($existingCustomerId, $context);
 
             return;
@@ -106,6 +115,9 @@ final readonly class CustomerResolver
             }
         }
 
+        $this->assertClientAllowedForEmail($clientId, $user->primaryEmail);
+        $enforced = $this->assertClientAllowedForEmail($clientId, $context->getCustomer()?->getEmail() ?? '');
+
         // Check if the OAuth key is already bound to a different customer
         $existingCustomerId = $this->findCustomerIdByKey($clientId, $user->primaryKey);
 
@@ -114,7 +126,7 @@ final readonly class CustomerResolver
         }
 
         $this->storeCustomerKey($customerId, $clientId, $user->primaryKey);
-        $this->randomizePasswordIfNeeded($customerId, $disablePasswordLogin, $context);
+        $this->randomizePasswordIfNeeded($customerId, $disablePasswordLogin || $enforced, $context);
 
         $this->eventDispatcher->dispatch(new OAuthCustomerConnectedEvent($customerId, $clientId, $user, $context));
     }
@@ -131,6 +143,40 @@ final readonly class CustomerResolver
         );
 
         $this->eventDispatcher->dispatch(new OAuthCustomerDisconnectedEvent($customerId, $clientId, $context));
+    }
+
+    /**
+     * Ensures that an email with an enforced domain is only used with one of its enforced clients.
+     *
+     * @return bool whether the email domain is enforced (and therefore enforced for this client)
+     */
+    private function assertClientAllowedForEmail(string $clientId, string $email): bool
+    {
+        $enforcedClientIds = $this->enforcedEmailDomains->getEnforcedClientIds($email);
+
+        if ($enforcedClientIds === []) {
+            return false;
+        }
+
+        if (!\in_array($clientId, $enforcedClientIds, true)) {
+            throw new OAuthEnforcedProviderException();
+        }
+
+        return true;
+    }
+
+    private function assertClientAllowedForCustomer(string $clientId, string $customerId): bool
+    {
+        if (!$this->enforcedEmailDomains->hasEnforcedDomains()) {
+            return false;
+        }
+
+        $email = $this->connection->fetchOne(
+            'SELECT email FROM customer WHERE id = :customerId',
+            ['customerId' => Uuid::fromHexToBytes($customerId)],
+        );
+
+        return $this->assertClientAllowedForEmail($clientId, \is_string($email) ? $email : '');
     }
 
     /**

@@ -33,7 +33,11 @@
             "loginRequired": "Please log in before connecting an account.",
             "connectFailed": "Could not connect the account. Please try again.",
             "disconnectFailed": "Could not disconnect the account. Please try again.",
-            "emailMismatch": "The email address from the provider does not match your account email. If your email address has changed, please contact the shop owner."
+            "emailMismatch": "The email address from the provider does not match your account email. If your email address has changed, please contact the shop owner.",
+            "enforcedProvider": "This sign-in option is not available for your email address. Please enter your email address in the login form and we will take you to the right sign-in page automatically."
         }
+    },
+    "error": {
+        "TINECT_OAUTH_ENFORCED_EMAIL_DOMAIN": "You cannot use this email address here. Please sign in using the login form or contact the shop owner."
     }
 }

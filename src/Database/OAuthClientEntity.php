@@ -41,6 +41,12 @@ class OAuthClientEntity extends BaseEntity
     #[Field(type: FieldType::BOOL)]
     public bool $hideLoginButton = false;
 
+    /**
+     * @var list<string>|null
+     */
+    #[Field(type: FieldType::JSON)]
+    public ?array $enforcedEmailDomains = null;
+
     #[Field(type: FieldType::JSON)]
     public ?array $config = null;
 

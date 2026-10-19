@@ -33,7 +33,11 @@
             "loginRequired": "Log in voordat u een account koppelt.",
             "connectFailed": "Kan het account niet koppelen. Probeer het opnieuw.",
             "disconnectFailed": "Kan het account niet ontkoppelen. Probeer het opnieuw.",
-            "emailMismatch": "Het e-mailadres van de provider komt niet overeen met uw account-e-mailadres. Als uw e-mailadres is gewijzigd, neem dan contact op met de winkeleigenaar."
+            "emailMismatch": "Het e-mailadres van de provider komt niet overeen met uw account-e-mailadres. Als uw e-mailadres is gewijzigd, neem dan contact op met de winkeleigenaar.",
+            "enforcedProvider": "Deze aanmeldmethode is niet beschikbaar voor uw e-mailadres. Voer uw e-mailadres in het aanmeldformulier in, dan sturen wij u automatisch door naar de juiste aanmeldpagina."
         }
+    },
+    "error": {
+        "TINECT_OAUTH_ENFORCED_EMAIL_DOMAIN": "U kunt dit e-mailadres hier niet gebruiken. Meld u aan via het aanmeldformulier of neem contact op met de winkeleigenaar."
     }
 }

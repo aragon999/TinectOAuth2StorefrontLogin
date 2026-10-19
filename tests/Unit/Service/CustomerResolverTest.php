@@ -18,8 +18,10 @@ use Tinect\OAuth2StorefrontLogin\Event\OAuthCustomerDisconnectedEvent;
 use Tinect\OAuth2StorefrontLogin\Event\OAuthCustomerEmailUpdatedEvent;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthAccountAlreadyConnectedException;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthEmailMismatchException;
+use Tinect\OAuth2StorefrontLogin\Exception\OAuthEnforcedProviderException;
 use Tinect\OAuth2StorefrontLogin\Exception\OAuthNoAccountFoundException;
 use Tinect\OAuth2StorefrontLogin\Service\CustomerResolver;
+use Tinect\OAuth2StorefrontLogin\Service\EnforcedEmailDomainService;
 use Doctrine\DBAL\DriverManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -428,13 +430,167 @@ final class CustomerResolverTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // enforced email domains
+    // -------------------------------------------------------------------------
+
+    public function testResolveRejectsOtherClientForEnforcedProviderEmail(): void
+    {
+        $user = new User();
+        $user->primaryKey = 'key-123';
+        $user->primaryEmail = 'max@example.com';
+        $user->emails = ['max@example.com'];
+
+        $accountService = $this->createMock(AccountService::class);
+        $accountService->expects(self::never())->method('loginById');
+
+        $resolver = $this->makeResolver(
+            accountService: $accountService,
+            enforcedEmailDomains: $this->makeEnforcedEmailDomains(Uuid::randomHex()),
+        );
+
+        $this->expectException(OAuthEnforcedProviderException::class);
+
+        $resolver->resolve($user, $this->clientId, 'GitHub', $this->createStub(SalesChannelContext::class));
+    }
+
+    public function testResolveRejectsOtherClientWhenKeyMappedCustomerHasEnforcedEmail(): void
+    {
+        $user = new User();
+        $user->primaryKey = 'key-123';
+        $user->primaryEmail = 'max@private.org';
+        $user->emails = ['max@private.org'];
+
+        $connection = $this->createStub(Connection::class);
+        $connection->method('fetchOne')->willReturnOnConsecutiveCalls(
+            $this->customerId, // findActiveCustomerIdByKey
+            'max@example.com', // customer email
+        );
+
+        $accountService = $this->createMock(AccountService::class);
+        $accountService->expects(self::never())->method('loginById');
+
+        $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
+
+        $resolver = $this->makeResolver(
+            connection: $connection,
+            accountService: $accountService,
+            enforcedEmailDomains: $this->makeEnforcedEmailDomains(Uuid::randomHex()),
+        );
+
+        $this->expectException(OAuthEnforcedProviderException::class);
+
+        $resolver->resolve($user, $this->clientId, 'GitHub', $context);
+    }
+
+    public function testResolveRandomizesPasswordWhenLoggingInViaEnforcedClient(): void
+    {
+        $user = new User();
+        $user->primaryKey = 'key-123';
+        $user->primaryEmail = 'max@example.com';
+        $user->emails = ['max@example.com'];
+
+        $connection = $this->createStub(Connection::class);
+        $connection->method('fetchOne')->willReturnOnConsecutiveCalls(
+            $this->customerId, // findActiveCustomerIdByKey
+            'max@example.com', // customer email
+        );
+
+        $accountService = $this->createMock(AccountService::class);
+        $accountService->expects(self::once())->method('loginById')->with($this->customerId);
+
+        $customerRepository = $this->createMock(EntityRepository::class);
+        $customerRepository->expects(self::once())
+            ->method('update')
+            ->with(self::callback(fn (array $data) => $data[0]['id'] === $this->customerId && \is_string($data[0]['password'])));
+
+        $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
+
+        $resolver = $this->makeResolver(
+            connection: $connection,
+            accountService: $accountService,
+            enforcedEmailDomains: $this->makeEnforcedEmailDomains($this->clientId),
+            customerRepository: $customerRepository,
+        );
+
+        $resolver->resolve($user, $this->clientId, 'Entra', $context);
+    }
+
+    public function testResolveKeepsPasswordWhenDomainIsNotEnforced(): void
+    {
+        $user = new User();
+        $user->primaryKey = 'key-123';
+        $user->primaryEmail = 'max@private.org';
+        $user->emails = ['max@private.org'];
+
+        $connection = $this->createStub(Connection::class);
+        $connection->method('fetchOne')->willReturnOnConsecutiveCalls(
+            $this->customerId, // findActiveCustomerIdByKey
+            'max@private.org', // customer email
+        );
+
+        $customerRepository = $this->createMock(EntityRepository::class);
+        $customerRepository->expects(self::never())->method('update');
+
+        $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getSalesChannelId')->willReturn(Uuid::randomHex());
+
+        $resolver = $this->makeResolver(
+            connection: $connection,
+            enforcedEmailDomains: $this->makeEnforcedEmailDomains($this->clientId),
+            customerRepository: $customerRepository,
+        );
+
+        $resolver->resolve($user, $this->clientId, 'Entra', $context);
+    }
+
+    public function testConnectRejectsOtherClientForEnforcedCustomerEmail(): void
+    {
+        $user = new User();
+        $user->primaryKey = 'key-123';
+        $user->primaryEmail = 'max@private.org';
+        $user->emails = ['max@private.org'];
+
+        $customer = $this->createStub(CustomerEntity::class);
+        $customer->method('getEmail')->willReturn('max@example.com');
+
+        $context = $this->createStub(SalesChannelContext::class);
+        $context->method('getCustomer')->willReturn($customer);
+
+        $connection = $this->createMock(Connection::class);
+        $connection->expects(self::never())->method('executeStatement');
+
+        $resolver = $this->makeResolver(
+            connection: $connection,
+            enforcedEmailDomains: $this->makeEnforcedEmailDomains(Uuid::randomHex()),
+        );
+
+        $this->expectException(OAuthEnforcedProviderException::class);
+
+        $resolver->connect($user, $this->clientId, $this->customerId, $context);
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private function makeEnforcedEmailDomains(string $clientId): EnforcedEmailDomainService
+    {
+        $connection = $this->createStub(Connection::class);
+        $connection->method('fetchAllAssociative')->willReturn([
+            ['id' => $clientId, 'enforced_email_domains' => '["example.com"]'],
+        ]);
+
+        return new EnforcedEmailDomainService($connection);
+    }
 
     private function makeResolver(
         ?Connection $connection = null,
         ?AccountService $accountService = null,
         ?EventDispatcherInterface $eventDispatcher = null,
+        ?EnforcedEmailDomainService $enforcedEmailDomains = null,
+        ?EntityRepository $customerRepository = null,
     ): CustomerResolver {
         return new CustomerResolver(
             $connection ?? $this->createStub(Connection::class),
@@ -442,7 +598,8 @@ final class CustomerResolverTest extends TestCase
             $this->createStub(AbstractRegisterRoute::class),
             $this->createStub(RequestStack::class),
             $eventDispatcher ?? $this->createStub(EventDispatcherInterface::class),
-            $this->createStub(EntityRepository::class),
+            $customerRepository ?? $this->createStub(EntityRepository::class),
+            $enforcedEmailDomains ?? new EnforcedEmailDomainService($this->createStub(Connection::class)),
         );
     }
 }

@@ -103,6 +103,14 @@
                         :disabled="!acl.can('tinect_oauth_storefront_client.editor')"
                     ></sw-switch-field>
                 </sw-container>
+                <sw-multi-tag-select
+                    v-model:value="client.enforcedEmailDomains"
+                    :label="$tc('tinect-oauth-storefront-client.edit.labelEnforcedEmailDomains')"
+                    :help-text="$tc('tinect-oauth-storefront-client.edit.labelEnforcedEmailDomainsHelp')"
+                    :placeholder="$tc('tinect-oauth-storefront-client.edit.placeholderEnforcedEmailDomains')"
+                    :validate="validateEmailDomain"
+                    :disabled="!acl.can('tinect_oauth_storefront_client.editor')"
+                ></sw-multi-tag-select>
             </sw-card>
             {% endblock %}
 
